@@ -83,7 +83,7 @@ class block_ungradedassignments extends block_base {
 				then, exclude all assignments from users no longer enrolled
 				in the course	
 			*/
-			$query ="SELECT s.id as subid, 'assignment' as assignmenttype, s.timemodified as timemodified, u.id as userid,  m.id as id ,a.name as name,u.lastname as lastname ,u.firstname as firstname
+			$query ="SELECT FLOOR(RAND()* 100000) as  rand, s.id as subid, 'assignment' as assignmenttype, s.timemodified as timemodified, u.id as userid,  m.id as id ,a.name as name,u.lastname as lastname ,u.firstname as firstname
 						FROM {$CFG->prefix}assignment a
 						INNER JOIN {$CFG->prefix}course_modules m ON (a.id=m.instance AND a.course=m.course AND m.module=1) 
 						INNER JOIN {$CFG->prefix}assignment_submissions s ON (a.id=s.assignment)
@@ -96,22 +96,32 @@ class block_ungradedassignments extends block_base {
 			$query = ($hideQuizzes) ? $query : $query .
 						
 						" UNION
-						
-						SELECT qa.id as subid, 'quiz' as assignmenttype, qa.timemodified as timemodified, u.id as userid,  qu.id as id,qu.name as name,u.lastname as lastname,u.firstname as firstname
-						FROM {$CFG->prefix}quiz qu
-						inner join {$CFG->prefix}quiz_attempts qa on qu.id = qa.quiz
+
+						SELECT FLOOR(RAND()* 100000) as rand, qa.id as subid, 'quiz' as assignmenttype, qa.timemodified as timemodified, u.id as userid,  qa.quiz as id,q.name as name,u.lastname as lastname,u.firstname as firstname
+						from {$CFG->prefix}quiz_attempts qa
 						inner join {$CFG->prefix}user u on u.id = qa.userid
-						inner join {$CFG->prefix}question_states state on qa.id = state.attempt
-						inner join {$CFG->prefix}question_sessions sess on qa.id = sess.attemptid
-						inner join {$CFG->prefix}question quest on quest.id = state.question
-						$sqlEnrolledHTML1
-						WHERE	qu.course={$id}
-						and qa.timefinish > 0
-						and qa.preview = 0
-						and sess.newest = state.id
-						and state.event != 9
-						and quest.qtype = 'essay'
-						$sqlEnrolledHTML2";
+						inner join {$CFG->prefix}quiz q on qa.quiz = q.id
+						{$sqlEnrolledHTML1}
+						where qa.sumgrades is null
+						and q.course=${id}
+						{$sqlEnrolledHTML2}";
+
+			$query .=	" UNION
+						
+						select FLOOR(RAND()* 100000) as rand,  ge.id as subid, 'glossary' as assignmenttype, max(ge.timemodified), u.id as userid, ge.glossaryid as id, g.name, u.lastname, u.firstname
+						from {$CFG->prefix}glossary_entries ge
+						inner join {$CFG->prefix}user u on u.id = ge.userid
+						inner join {$CFG->prefix}glossary g on ge.glossaryid = g.id
+						{$sqlEnrolledHTML1}
+						where ge.userid not in (
+						    select userid from {$CFG->prefix}grade_grades gg
+						    inner join {$CFG->prefix}grade_items gi on gi.id = gg.itemid
+						    where gi.itemmodule = 'glossary' and gi.iteminstance = ge.glossaryid)
+							and g.course = ${id}
+						{$sqlEnrolledHTML2}
+						group by userid, g.id
+						";
+
 						
 			$query .=	" order by name, lastname, firstname";
 
@@ -133,6 +143,7 @@ class block_ungradedassignments extends block_base {
 				$userArray["courseid"] = $assignment->id;
 				$userArray["assignmenttype"] = $assignment->assignmenttype;
 				$userArray["subid"] = $assignment->subid;
+				$userArray["rand"] = $assignment->rand;
 				
 				$courses[$assignment->name][] = $userArray;
 				
@@ -143,9 +154,9 @@ class block_ungradedassignments extends block_base {
 			// loop through $assignments and build html to display them including javascript to allow collapsing\
 			foreach ($courses as $key=>$value) {
 				//javascript id to identify the div containing the submissions for this assignment
-				$divID="mdl_block_ungraded_assignments_" . $value[0]["courseid"];
+				$divID="mdl_block_ungraded_assignments_" . $value[0]["rand"];
 				//javascript id to identify the collapse / expand images for this assignment
-				$imgID="imgCollapse_block_ungraded_assignments_" . $value[0]["courseid"];
+				$imgID="imgCollapse_block_ungraded_assignments_" . $value[0]["rand"];
 				
 				//display the assignment
 				$this->content->text .= "<div style=\"padding: 2px; cursor:pointer;\" onClick=\"document.getElementById('$imgID').src=(document.getElementById('$imgID').src=='$collapseImg') ? document.getElementById('$imgID').src='$expandImg' : document.getElementById('$imgID').src='$collapseImg';document.getElementById('$divID').style.display=(document.getElementById('$divID').style.display=='none') ? document.getElementById('$divID').style.display='block' : document.getElementById('$divID').style.display='none'; \"><img src=\"$defaultCollapseIcon\" id=\"$imgID\" target=\"_blank\" style=\"padding-right:2px;\" alt=\"\" />$key</div>
@@ -158,12 +169,17 @@ class block_ungradedassignments extends block_base {
 					switch ($userInfo["assignmenttype"]) {
 						case ("quiz") : {
 							$gradeURL = $CFG->wwwroot . "/mod/quiz/review.php?q=" . $userInfo["courseid"] . "&attempt=" . $userInfo["subid"];
-							$iconURL = "/mod/quiz/icon.gif";
+							$iconURL = $CFG->wwwroot . "/theme/image.php?image=icon&component=quiz";
 							break;
 						}
 						case ("assignment") : {
 							$gradeURL = $CFG->wwwroot . "/mod/assignment/submissions.php?id=" . $userInfo["courseid"] . "&userid=" . $userInfo["userid"] . "&mode=single&offset=1";
-							$iconURL = "/mod/assignment/icon.gif";
+							$iconURL = $CFG->wwwroot . "/theme/image.php?image=icon&component=assignment";
+							break;
+						}
+						case ("glossary") : {
+							$gradeURL = $CFG->wwwroot . "/grade/report/grader/index.php?id=". $id;
+							$iconURL = $CFG->wwwroot . "/theme/image.php?image=icon&component=glossary";
 							break;
 						}
 					}
