@@ -104,6 +104,7 @@ class block_ungradedassignments extends block_base {
 						{$sqlEnrolledHTML1}
 						where qa.sumgrades is null
 						and q.course=${id}
+						and qa.timefinish > 0
 						{$sqlEnrolledHTML2}";
 
 			$query .=	" UNION
