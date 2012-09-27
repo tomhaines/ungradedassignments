@@ -88,9 +88,11 @@ class block_ungradedassignments extends block_base {
 						INNER JOIN {$CFG->prefix}course_modules m ON (a.id=m.instance AND a.course=m.course AND m.module=1) 
 						INNER JOIN {$CFG->prefix}assignment_submissions s ON (a.id=s.assignment)
 						INNER JOIN {$CFG->prefix}user u ON (u.id=s.userid)
+						inner join {$CFG->prefix}grade_items gi on gi.iteminstance = s.assignment and gi.itemmodule = 'assignment'
+						left outer join {$CFG->prefix}grade_grades g on gi.id = g.itemid and g.userid = u.id
 						{$sqlEnrolledHTML1}
 						WHERE a.course={$id}
-						AND s.timemodified>s.timemarked
+						AND ((g.overridden < s.timemodified and g.overridden != 0) or (s.timemodified>s.timemarked and g.overridden = 0))
 						{$sqlEnrolledHTML2}";
 						
 			$query = ($hideQuizzes) ? $query : $query .
